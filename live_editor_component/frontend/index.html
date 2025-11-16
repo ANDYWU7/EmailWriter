@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Inline Editor</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      background: transparent;
+    }
+    #editor {
+      border: 1px solid #ccc;
+      padding: 12px;
+      border-radius: 6px;
+      min-height: 260px;
+      white-space: pre-wrap;
+      line-height: 1.5;
+      outline: none;
+    }
+    .suggestion {
+      text-decoration: underline;
+      text-decoration-style: wavy;
+      cursor: pointer;
+    }
+    .s-red {
+      text-decoration-color: red;
+    }
+    .s-blue {
+      text-decoration-color: blue;
+    }
+    .s-yellow {
+      text-decoration-color: goldenrod;
+    }
+    #tooltip {
+      position: fixed;
+      padding: 8px 10px;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 12px;
+      max-width: 280px;
+      display: none;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+      z-index: 9999;
+    }
+    #tooltip strong {
+      display: block;
+      margin-bottom: 4px;
+    }
+    #tooltip .apply-link {
+      color: #0b63ff;
+      cursor: pointer;
+    }
+    .accepted {
+      text-decoration: none;
+      background-color: #eafaea;
+    }
+  </style>
+</head>
+<body>
+  <div id="editor" contenteditable="true"></div>
+  <div id="tooltip"></div>
+
+  <script>
+    const Streamlit = window.Streamlit || window.parent.Streamlit;
+    const editor = document.getElementById("editor");
+    const tooltip = document.getElementById("tooltip");
+    let debounceTimer = null;
+    let debounceMs = 600;
+    let lastHtml = null;
+
+    function sendBackToStreamlit() {
+      const updated = editor.innerText;
+      Streamlit.setComponentValue(updated);
+    }
+
+    function debounceSend() {
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
+      }
+      debounceTimer = setTimeout(sendBackToStreamlit, debounceMs);
+    }
+
+    function showTooltip(span, event) {
+      const suggestion = span.dataset.suggestion || "";
+      const explanation = span.dataset.explanation || "";
+      tooltip.innerHTML =
+        "<strong>Suggestion</strong>" +
+        "<div>" + suggestion + "</div>" +
+        (explanation ? "<em>" + explanation + "</em>" : "") +
+        "<br/><span class='apply-link' id='applySuggestion'>Apply</span>";
+      tooltip.style.left = event.clientX + 10 + "px";
+      tooltip.style.top = event.clientY + 10 + "px";
+      tooltip.style.display = "block";
+
+      const apply = document.getElementById("applySuggestion");
+      if (apply) {
+        apply.onclick = () => {
+          span.textContent = suggestion || span.textContent;
+          span.classList.remove("suggestion");
+          span.classList.add("accepted");
+          tooltip.style.display = "none";
+          debounceSend();
+        };
+      }
+    }
+
+    function hideTooltip() {
+      tooltip.style.display = "none";
+    }
+
+    editor.addEventListener("input", debounceSend);
+    editor.addEventListener("mouseover", (event) => {
+      const span = event.target.closest(".suggestion");
+      if (span) {
+        showTooltip(span, event);
+      } else {
+        hideTooltip();
+      }
+    });
+    editor.addEventListener("scroll", hideTooltip);
+    document.addEventListener("click", (event) => {
+      if (!event.target.closest(".suggestion") && !event.target.closest("#tooltip")) {
+        hideTooltip();
+      }
+    });
+
+    function setHighlightedHtml(html) {
+      if (html === undefined || html === null) {
+        html = "";
+      }
+      if (html === lastHtml) {
+        return;
+      }
+      lastHtml = html;
+      editor.innerHTML = html;
+    }
+
+    function onRender(event) {
+      const { highlighted_html, debounce_ms, height } = event.detail.args;
+      debounceMs = debounce_ms || 600;
+      setHighlightedHtml(highlighted_html || "");
+      Streamlit.setFrameHeight(height || 360);
+    }
+
+    Streamlit.events.addEventListener(Streamlit.RENDER_EVENT, onRender);
+    Streamlit.setComponentReady();
+    Streamlit.setFrameHeight(360);
+  </script>
+</body>
+</html>

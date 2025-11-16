@@ -1,5 +1,6 @@
 import streamlit.components.v1 as components
 import html
+from live_editor_component import live_editor_component
 
 def render_inline_editor(highlighted_html: str):
     components.html(
@@ -107,7 +108,6 @@ def render_inline_editor(highlighted_html: str):
         """,
         height=350,
         scrolling=True,
-        key="inline_editor",
     )
 
 def highlight_text(text:str , suggestions):
@@ -188,108 +188,41 @@ def build_highlighted_html(text: str, suggestions):
 
 
 def render_live_editor(highlighted_html: str, debounce_ms: int = 600):
-    components.html(f"""
-    <style>
-      #editor {{
-        border: 1px solid #ccc;
-        padding: 12px;
-        border-radius: 6px;
-        min-height: 260px;
-        font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-        white-space: pre-wrap;
-        line-height: 1.5;
-      }}
-      .suggestion {{
-        text-decoration: underline;
-        text-decoration-style: wavy;
-        cursor: pointer;
-      }}
-      .s-red {{ text-decoration-color: red; }}
-      .s-blue {{ text-decoration-color: blue; }}
-      .s-yellow {{ text-decoration-color: goldenrod; }}
+    return live_editor_component(
+        highlighted_html=highlighted_html,
+        debounce_ms=debounce_ms,
+        height=360,
+        key="live_editor",
+    )
 
-      #tooltip {{
-        position: fixed;
-        padding: 8px 10px;
-        background: #fff;
-        border: 1px solid #ddd;
-        border-radius: 6px;
-        font-size: 12px;
-        max-width: 280px;
-        display: none;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.15);
-        z-index: 9999;
-      }}
-      #tooltip strong {{ display: block; margin-bottom: 4px; }}
-      #tooltip .apply-link {{ color: #0b63ff; cursor: pointer; }}
-      .accepted {{ text-decoration: none; background-color: #eafaea; }}
-    </style>
 
-    <div id="editor" contenteditable="true">{highlighted_html}</div>
-    <div id="tooltip"></div>
-
-    <script>
-      const editor = document.getElementById("editor");
-      const tooltip = document.getElementById("tooltip");
-      let tId = null;
-      const debounceMs = {debounce_ms};
-
-      function debounceSend() {{
-        if (tId) clearTimeout(tId);
-        tId = setTimeout(sendBackToStreamlit, debounceMs);
-      }}
-
-      function sendBackToStreamlit() {{
-        const updated = editor.innerText;
-        window.parent.postMessage(
-          {{
-            isStreamlitMessage: true,
-            type: "streamlit:setComponentValue",
-            value: updated
-          }},
-          "*"
-        );
-      }}
-
-      function showTooltip(span, event) {{
-        const suggestion = span.dataset.suggestion || "";
-        const explanation = span.dataset.explanation || "";
-        tooltip.innerHTML = "<strong>Suggestion</strong>" +
-          "<div>" + suggestion + "</div>" +
-          (explanation ? "<em>" + explanation + "</em>" : "") +
-          "<br/><span class='apply-link' id='applySuggestion'>Apply</span>";
-        tooltip.style.left = (event.clientX + 10) + "px";
-        tooltip.style.top = (event.clientY + 10) + "px";
-        tooltip.style.display = "block";
-
-        const apply = document.getElementById("applySuggestion");
-        if (apply) {{
-          apply.onclick = function() {{
-            span.textContent = suggestion || span.textContent;
-            span.classList.remove("suggestion");
-            span.classList.add("accepted");
-            tooltip.style.display = "none";
-            debounceSend();
-          }};
-        }}
-      }}
-
-      function hideTooltip() {{ tooltip.style.display = "none"; }}
-
-      editor.addEventListener("input", debounceSend);
-      editor.addEventListener("mouseover", function(e) {{
-        const span = e.target.closest(".suggestion");
-        if (span) {{
-          showTooltip(span, e);
-        }} else {{
-          hideTooltip();
-        }}
-      }});
-      editor.addEventListener("scroll", hideTooltip);
-      document.addEventListener("click", function(e) {{
-        if (!e.target.closest(".suggestion") && !e.target.closest("#tooltip")) {{
-          hideTooltip();
-        }}
-      }});
-    </script>
-    """, height=360, scrolling=True)
+def render_highlight_preview(highlighted_html: str):
+    components.html(
+        f"""
+        <style>
+          .preview-wrapper {{
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            padding: 12px;
+            min-height: 260px;
+            font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+            white-space: pre-wrap;
+            line-height: 1.5;
+          }}
+          .suggestion {{
+            text-decoration: underline;
+            text-decoration-style: wavy;
+          }}
+          .s-red {{ text-decoration-color: red; }}
+          .s-blue {{ text-decoration-color: blue; }}
+          .s-yellow {{ text-decoration-color: goldenrod; }}
+          .accepted {{
+            text-decoration: none;
+            background-color: #eafaea;
+          }}
+        </style>
+        <div class="preview-wrapper">{highlighted_html}</div>
+        """,
+        height=360,
+        scrolling=True,
+    )

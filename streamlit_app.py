@@ -25,6 +25,15 @@ if "live_suggestions" not in st.session_state:
 if "last_checked_text" not in st.session_state:
     st.session_state["last_checked_text"] = ""
 
+if "editor_mode" not in st.session_state:
+    st.session_state["editor_mode"] = "manual"
+
+if "manual_editor_input" not in st.session_state:
+    st.session_state["manual_editor_input"] = st.session_state["live_text"]
+
+if "live_check_ms" not in st.session_state:
+    st.session_state["live_check_ms"] = 600
+
 
 st.markdown("# Writing tool")
 
@@ -143,22 +152,63 @@ if mode in ["Paraphrase", "Grammar check"]:
             )
 elif mode == "Grammarly mode":
     with st.expander("Settings", expanded=False):
-        
-        run_ms = st.slider("Live Checker Rate (ms)", 200, 1500, 600, 50)
+        previous_mode = st.session_state.get("editor_mode", "manual")
+        auto_mode_default = previous_mode == "auto"
+        auto_mode = st.checkbox(
+            "Auto-check while typing (inline editor)",
+            value=auto_mode_default,
+            help="Turn off to type freely and run checks manually.",
+        )
+        st.session_state["editor_mode"] = "auto" if auto_mode else "manual"
+        if auto_mode and previous_mode != "auto":
+            st.session_state["live_text"] = st.session_state.get(
+                "manual_editor_input", st.session_state["live_text"]
+            )
+        if (not auto_mode) and previous_mode == "auto":
+            st.session_state["manual_editor_input"] = st.session_state["live_text"]
+        if auto_mode:
+            run_ms = st.slider(
+                "Live Checker Rate (ms)", 200, 1500,
+                st.session_state.get("live_check_ms", 600), 50,
+            )
+            st.session_state["live_check_ms"] = run_ms
+        else:
+            run_ms = st.session_state.get("live_check_ms", 600)
 
-    incoming_text = st.session_state.get("live_editor") 
-    if incoming_text is not None:
-        st.session_state["live_text"] = incoming_text
-
+    if auto_mode:
         # Compute suggestions when the text changed since the last check
-    if st.session_state["live_text"] != st.session_state["last_checked_text"]:
-        result = get_suggestions(st.session_state["live_text"])
-        st.session_state["live_suggestions"] = result.get("suggestions", [])
-        st.session_state["last_checked_text"] = st.session_state["live_text"]
+        if st.session_state["live_text"] != st.session_state["last_checked_text"]:
+            result = get_suggestions(st.session_state["live_text"])
+            st.session_state["live_suggestions"] = result.get("suggestions", [])
+            st.session_state["last_checked_text"] = st.session_state["live_text"]
 
-        # Build and render the editor with colored underlines
-    html_view = build_highlighted_html(
-        st.session_state["live_text"],
-        st.session_state["live_suggestions"]
-    )
-    render_live_editor(html_view, debounce_ms=run_ms)
+        # Build highlighted markup and render live editor
+        html_view = build_highlighted_html(
+            st.session_state["live_text"],
+            st.session_state["live_suggestions"]
+        )
+        new_text = render_live_editor(html_view, debounce_ms=run_ms)
+        if new_text is not None and new_text != st.session_state["live_text"]:
+            st.session_state["live_text"] = new_text
+            st.session_state["manual_editor_input"] = new_text
+    else:
+        manual_text = st.text_area(
+            "Write or paste text",
+            key="manual_editor_input",
+            height=320,
+            placeholder="Type your draft here, then press 'Check text' to highlight issues.",
+        )
+        run_check = st.button("Check text", type="primary")
+        if run_check:
+            st.session_state["live_text"] = manual_text
+            result = get_suggestions(manual_text)
+            st.session_state["live_suggestions"] = result.get("suggestions", [])
+            st.session_state["last_checked_text"] = manual_text
+
+        html_view = build_highlighted_html(
+            st.session_state["live_text"],
+            st.session_state["live_suggestions"]
+        )
+        render_highlight_preview(html_view)
+        if st.session_state["live_text"] != st.session_state["manual_editor_input"]:
+            st.caption("Press “Check text” to refresh suggestions for the latest edits.")
