@@ -292,4 +292,4 @@ def render_live_editor(highlighted_html: str, debounce_ms: int = 600):
         }}
       }});
     </script>
-    """, height=360, scrolling=True, key="live_editor")
+    """, height=360, scrolling=True)

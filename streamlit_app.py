@@ -5,7 +5,7 @@ from openai import OpenAI
 import os
 import html
 import json
-from grammarly_helper import render_inline_editor, highlight_text
+from grammarly_helper import *
 
 load_dotenv()
 secret_key = os.getenv("api_key")
@@ -46,14 +46,14 @@ def run_standard_model():
         system_prompt = (
             "You are a helpful writing assistant. "
             "Paraphrase the user's text clearly while preserving meaning. "
-            "Output only the improved text."
+            "Output only the improved text. "
             'If there is not enough context, type "Not enough context to paraphrase your text."'
         )
     elif mode == "Grammar check":
         system_prompt = (
             "You are a grammar correction assistant. "
             "Fix grammar, spelling, and punctuation without changing style more than necessary. "
-            "Output only the corrected text."
+            "Output only the corrected text. "
             'If there is not enough context, type "Not enough context to grammar check your text."'
         )
     else:
@@ -74,7 +74,7 @@ def run_standard_model():
 def get_suggestions(text: str):
     #
     if not text.strip():
-        return []
+        return {"suggestions": []}
     system_prompt = """
     You are an inline writing assistant. 
     Find important grammar, clarity, or word choice issues.
@@ -82,34 +82,31 @@ def get_suggestions(text: str):
     Red is for incorrect spelling.
     Blue is for grammatical errors.
     Yellow is for suggestions to improve the text.
-
+    
     Return ONLY a JSON object with this exact structure:
     
     {
-        "suggestions": [
-            {
-                "start": 0,
-                "end": 0,
-                "original": "string",
-                "suggestion": "string",
-                "explanation": "string",
-                "color": "red" or "blue" or "yellow"
-            },
-            {
-                "start": 0,
-                "end": 0,
-                "original": "string",
-                "suggestion": "string",
-                "explanation": "string",
-                "color": "red" or "blue" or "yellow"
-            },
-            ...
-        ]
+      "suggestions": [
+        {
+          "start": 0,
+          "end": 0,
+          "original": "string",
+          "suggestion": "string",
+          "explanation": "string",
+          "color": "red"
+        }
+      ]
     }
+    
+    Rules:
+    - "start" and "end" are 0-based character indices in the ORIGINAL text, end is exclusive.
+    - "original" must exactly match text[start:end].
+    - "color" must be one of: "red", "blue", "yellow".
+    - Focus on the most useful issues. If none, return { "suggestions": [] }.
     """
     resp = client.chat.completions.create(
         model="gpt-4o-mini",
-        response_format={"type", "json_object"},
+        response_format={"type": "json_object"},
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": text},
@@ -117,8 +114,8 @@ def get_suggestions(text: str):
     )
     try:
         return json.loads(resp.choices[0].message.content)
-    except Exception as e:
-        return {}
+    except Exception:
+        return {"suggestions": []}
 
 
 # ========== UI flow based on mode ========== #
@@ -146,12 +143,22 @@ if mode in ["Paraphrase", "Grammar check"]:
             )
 elif mode == "Grammarly mode":
     with st.expander("Settings", expanded=False):
+        
         run_ms = st.slider("Live Checker Rate (ms)", 200, 1500, 600, 50)
-    st.text_area(
-        "Input",
-        key="input_text",
-        label_visibility="collapsed",
-        height=500,
-        placeholder=f"Enter your text here.",
-        max_chars=7500,
+
+    incoming_text = st.session_state.get("live_editor") 
+    if incoming_text is not None:
+        st.session_state["live_text"] = incoming_text
+
+        # Compute suggestions when the text changed since the last check
+    if st.session_state["live_text"] != st.session_state["last_checked_text"]:
+        result = get_suggestions(st.session_state["live_text"])
+        st.session_state["live_suggestions"] = result.get("suggestions", [])
+        st.session_state["last_checked_text"] = st.session_state["live_text"]
+
+        # Build and render the editor with colored underlines
+    html_view = build_highlighted_html(
+        st.session_state["live_text"],
+        st.session_state["live_suggestions"]
     )
+    render_live_editor(html_view, debounce_ms=run_ms)
